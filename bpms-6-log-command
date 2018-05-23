@@ -1,0 +1,165 @@
+    Log Command CleanUp
+
+Production support procedures should be introduced to ensure the BPM environment remains healthy.
+
+The BPMS engine produces both runtime and audit information. Runtime data is managed and cleaned-up automatically by the engine when certain life cycle events occur such as:
+
+    process instance information will be removed upon process instance completion
+    work item information will be removed upon work item completion
+    task instance information (including content) will be removed upon completion of a process instance that given tasks belongs to.
+
+Session information clean up depends on the runtime strategy selected
+
+    singleton - won't be removed at all
+    per request will be removed as soon as given request ends
+    per process instance - will be removed when process instance mapped to given session completes (or aborts)
+    executor's request and error information is not removed
+
+However, by default audit information held in the following tables will not be cleaned-up automatically.
+
+    Process Instance Log
+    Node Instance Log
+    Variable Instance Log
+    Task Audit Log
+    TaskEventLog
+    Error Info Log
+    Request Info Log
+
+The BPMS product provides two solutions for handling this:
+
+    scheduled job running in background at defined intervals
+    manual clean up by taking advantage of the Kie-Server audit API.
+
+Job Storage
+
+Job information is stored in the following BPM database table: RequestInfo
+Automatic CleanUp Using the Kie-Server Rest API:
+
+The Kie-server api documentation can be found here: http://localhost:8080/kie-server/docs/index.html
+
+The server/jobs services provide a set of methods for managing the cleanup jobs. This is a brief summary of the operations provided:
+
+    server/jobs - GET
+    server/jobs - POST
+    server/jobs/commands/{cmd} - GET
+    server/jobs/keys/{key} - GET
+    server/jobs/{jobId} - DELETE
+    server/jobs/{jobId} - GET
+    server/jobs/{jobId} - PUT
+
+A list of the various commands can be found here: https://github.com/kiegroup/jbpm/tree/master/jbpm-services/jbpm-executor/src/main/java/org/jbpm/executor/commands
+
+Detailed explanation of the BPM executor can be found here: https://docs.jboss.org/jbpm/v6.4/userguide/ch24.html#d0e29454
+
+The following examples related to the LogCleanUpCommand.
+
+The LogCleanUpCommand support the following list of config parameters:
+
+    SkipProcessLog - indicates if clean up of process logs should be omitted (true|false)
+    SkipTaskLog - indicates if clean up of task logs should be omitted (true|false)
+    SkipExecutorLog - indicates if clean up of executor logs should be omitted (true|false)
+    DateFormat - date format for further date related params - if not given yyyy-MM-dd is used (pattern of SimpleDateFormat class)
+    EmfName - name of entity manager factory to be used for queries (valid persistence unit name)
+    SingleRun - indicates if execution should be single run only (true|false)
+    NextRun - provides next execution time (valid time expression e.g. 1d, 5h, etc)
+    OlderThan - indicates what logs should be deleted - older than given date
+    OlderThanPeriod - indicated what logs should be deleted older than given time expression (valid time expression e.g. 1d, 5h, etc)
+    ForProcess - indicates logs to be deleted only for given process definition
+    ForDeployment - indicates logs to be deleted that are from given deployment id
+
+Example 1: - Create a job that executes every day to remove all log entries for a particular process
+
+POST - http://localhost:8080/kie-server/services/rest/server/jobs
+
+Headers:
+
+Accept : application/json
+Content-Type : application/json
+Authorisation : Basic <YOUR ENCODED PASSWORD>
+
+Request Body:
+
+{
+    "job-command": "org.jbpm.executor.commands.LogCleanupCommand",
+    "scheduled-date" : 1498034435119,
+    "request-data": {
+	"SingleRun": "true",
+	"ForDeployment" : "checklists:newProject:1.0-SNAPSHOT"
+    }
+}
+
+Result:
+
+The Log Clean Up Job will execute once and will delete all entries relating to the "checklists:newProject:1.0-SNAPSHOT" deployment.
+
+Terminal Output:
+
+    INFO [org.jbpm.executor.commands.LogCleanupCommand] (Thread-1452 (HornetQ-client-global-threads-673346592)) ProcessInstanceLogRemoved 14
+    INFO [org.jbpm.executor.commands.LogCleanupCommand] (Thread-1452 (HornetQ-client-global-threads-673346592)) NodeInstanceLogRemoved 98
+    INFO [org.jbpm.executor.commands.LogCleanupCommand] (Thread-1452 (HornetQ-client-global-threads-673346592)) VariableInstanceLogRemoved 21
+    INFO [org.jbpm.executor.commands.LogCleanupCommand] (Thread-1452 (HornetQ-client-global-threads-673346592)) TaskAuditLogRemoved 0
+    INFO [org.jbpm.executor.commands.LogCleanupCommand] (Thread-1452 (HornetQ-client-global-threads-673346592)) TaskEventLogRemoved 0
+    INFO [org.jbpm.executor.commands.LogCleanupCommand] (Thread-1452 (HornetQ-client-global-threads-673346592)) **ErrorInfoLogsRemoved **0
+    INFO [org.jbpm.executor.commands.LogCleanupCommand] (Thread-1452 (HornetQ-client-global-threads-673346592)) RequestInfoLogsRemoved 1
+
+Example 2: - Create a job that executes once to remove all log entries for a particular process
+
+POST - http://localhost:8080/kie-server/services/rest/server/jobs
+
+Headers:
+
+Accept : application/json
+Content-Type : application/json
+Authorisation : Basic <YOUR ENCODED PASSWORD>
+
+Request Body (JSON):
+
+{
+    "job-command": "org.jbpm.executor.commands.LogCleanupCommand",
+    "scheduled-date" : 1498034435119,
+    "request-data": {
+	"SingleRun": "false",
+        "NextRun": "1d",
+	"ForDeployment" : "checklists:newProject:1.0-SNAPSHOT"
+    }
+}
+
+Request Body (XML):
+
+<job-request-instance>
+   <job-command>org.jbpm.executor.commands.LogCleanupCommand</job-command>
+   <scheduled-date>2017-06-21T20:55:52.930+02:00</scheduled-date>
+   <data>
+      <entry>
+          <key>forDeployment</key>
+          <value xsi:type="xs:string" xmlns:xs="http://www.w3.org/2001/XMLSchema" 
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">checklists:newProject:1.0-SNAPSHOT</value>
+      </entry>
+      <entry>
+          <key>singleRun</key>
+          <value xsi:type="xs:boolean" xmlns:xs="http://www.w3.org/2001/XMLSchema" 
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">true</value>
+    </entry>
+    <entry>
+        <key>customValue</key>
+        <value xsi:type="xs:string" xmlns:xs="http://www.w3.org/2001/XMLSchema" 
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">just a simple value</value>
+    </entry>
+    <entry>
+        <key>businessKey</key>
+        <value xsi:type="xs:string" xmlns:xs="http://www.w3.org/2001/XMLSchema" 
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">test key</value>
+    </entry>
+   </data>
+</job-request-instance>
+
+Result:
+
+The Log Clean Up Job will execute everyday and will delete all entries relating to the "checklists:newProject:1.0-SNAPSHOT" deployment.
+Useful Links:
+
+    http://mswiderski.blogspot.co.uk/2014/12/keep-your-jbpm-environment-healthy.html
+    https://github.com/kiegroup/jbpm/blob/master/jbpm-services/jbpm-executor/src/main/java/org/jbpm/executor/commands/LogCleanupCommand.java
+    https://access.redhat.com/documentation/en-US/Red_Hat_JBoss_BPM_Suite/6.3/html/Administration_And_Configuration_Guide/configuring_logging3.html
+
+Example Payloads
